@@ -224,6 +224,14 @@ type Dialer struct {
 	// If ControlContext is not nil, Control is ignored.
 	ControlContext func(ctx context.Context, network, address string, c syscall.RawConn) error
 
+	// SCTPTransportMode controls how SCTP connections are established when
+	// using SCTP-specific dialing helpers.
+	SCTPTransportMode SCTPTransportMode
+
+	// SCTPUDPEncapsulation configures RFC 6951 UDP encapsulation when an SCTP
+	// backend supports it.
+	SCTPUDPEncapsulation SCTPUDPEncapsulationConfig
+
 	// If mptcpStatus is set to a value allowing Multipath TCP (MPTCP) to be
 	// used, any call to Dial with "tcp(4|6)" as network will use MPTCP if
 	// supported by the operating system.
@@ -857,6 +865,14 @@ type ListenConfig struct {
 	// used, any call to Listen with "tcp(4|6)" as network will use MPTCP if
 	// supported by the operating system.
 	mptcpStatus mptcpStatusListen
+
+	// SCTPTransportMode controls how SCTP sockets are created when using
+	// SCTP-specific listen/open helpers.
+	SCTPTransportMode SCTPTransportMode
+
+	// SCTPUDPEncapsulation configures RFC 6951 UDP encapsulation when an SCTP
+	// backend supports it.
+	SCTPUDPEncapsulation SCTPUDPEncapsulationConfig
 }
 
 // MultipathTCP reports whether MPTCP will be used.

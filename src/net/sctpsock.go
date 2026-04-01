@@ -6,6 +6,7 @@ package net
 
 import (
 	"context"
+	"errors"
 	"internal/strconv"
 	"net/netip"
 	"runtime"
@@ -100,6 +101,32 @@ type SCTPInitOptions struct {
 	MaxInStreams   uint16
 	MaxAttempts    uint16
 	MaxInitTimeout uint16
+}
+
+// SCTPTransportMode selects how an SCTP connection is established.
+type SCTPTransportMode int
+
+const (
+	// SCTPTransportAuto prefers the native SCTP backend and may fall back to
+	// another transport when available.
+	SCTPTransportAuto SCTPTransportMode = iota
+
+	// SCTPTransportNative forces the native kernel SCTP backend.
+	SCTPTransportNative
+
+	// SCTPTransportUDPEncap forces an RFC 6951 UDP-encapsulated SCTP backend.
+	SCTPTransportUDPEncap
+)
+
+// SCTPUDPEncapsulationConfig configures RFC 6951 UDP encapsulation.
+type SCTPUDPEncapsulationConfig struct {
+	// LocalPort is the local UDP encapsulation port. A value of zero requests
+	// the backend default.
+	LocalPort int
+
+	// RemotePort is the remote UDP encapsulation port. A value of zero requests
+	// the backend default.
+	RemotePort int
 }
 
 // SCTPSndInfo controls per-message SCTP metadata for sends.
@@ -247,6 +274,30 @@ type SCTPConn struct {
 	multiLocal []SCTPAddr
 	multiPeer  []SCTPAddr
 	assocID    int32
+}
+
+var errSCTPUDPEncapUnavailable = errors.New("SCTP UDP encapsulation backend not implemented")
+
+func sctpValidateTransportMode(mode SCTPTransportMode) error {
+	switch mode {
+	case SCTPTransportAuto, SCTPTransportNative:
+		return nil
+	case SCTPTransportUDPEncap:
+		return errSCTPUDPEncapUnavailable
+	default:
+		return errors.New("invalid SCTP transport mode")
+	}
+}
+
+func sctpTransportModeFromDialer(d *Dialer) SCTPTransportMode {
+	if d == nil {
+		return SCTPTransportAuto
+	}
+	return d.SCTPTransportMode
+}
+
+func sctpTransportModeFromListenConfig(lc ListenConfig) SCTPTransportMode {
+	return lc.SCTPTransportMode
 }
 
 func newSCTPConn(fd *netFD) *SCTPConn { return &SCTPConn{conn: conn{fd}} }
@@ -662,12 +713,27 @@ func DialSCTP(network string, laddr, raddr *SCTPAddr) (*SCTPConn, error) {
 	return dialSCTP(context.Background(), nil, network, laddr, raddr)
 }
 
+// DialSCTP acts like the package-level [DialSCTP], using d for optional SCTP
+// transport selection and socket configuration.
+func (d *Dialer) DialSCTP(network string, laddr, raddr *SCTPAddr) (*SCTPConn, error) {
+	return dialSCTP(context.Background(), d, network, laddr, raddr)
+}
+
 // DialSCTPInit acts like [DialSCTP] and configures SCTP_INITMSG before connect.
 func DialSCTPInit(network string, laddr, raddr *SCTPAddr, opts SCTPInitOptions) (*SCTPConn, error) {
 	return dialSCTPInit(context.Background(), nil, network, laddr, raddr, opts)
 }
 
+// DialSCTPInit acts like the package-level [DialSCTPInit], using d for
+// optional SCTP transport selection and socket configuration.
+func (d *Dialer) DialSCTPInit(network string, laddr, raddr *SCTPAddr, opts SCTPInitOptions) (*SCTPConn, error) {
+	return dialSCTPInit(context.Background(), d, network, laddr, raddr, opts)
+}
+
 func dialSCTPInit(ctx context.Context, dialer *Dialer, network string, laddr, raddr *SCTPAddr, opts SCTPInitOptions) (*SCTPConn, error) {
+	if err := sctpValidateTransportMode(sctpTransportModeFromDialer(dialer)); err != nil {
+		return nil, &OpError{Op: "dial", Net: network, Source: laddr.opAddr(), Addr: raddr.opAddr(), Err: err}
+	}
 	d := &Dialer{}
 	if dialer != nil {
 		*d = *dialer
@@ -740,6 +806,9 @@ func dialSCTPInit(ctx context.Context, dialer *Dialer, network string, laddr, ra
 }
 
 func dialSCTP(ctx context.Context, dialer *Dialer, network string, laddr, raddr *SCTPAddr) (*SCTPConn, error) {
+	if err := sctpValidateTransportMode(sctpTransportModeFromDialer(dialer)); err != nil {
+		return nil, &OpError{Op: "dial", Net: network, Source: laddr.opAddr(), Addr: raddr.opAddr(), Err: err}
+	}
 	switch network {
 	case "sctp", "sctp4", "sctp6":
 	default:
@@ -764,6 +833,9 @@ func dialSCTP(ctx context.Context, dialer *Dialer, network string, laddr, raddr 
 }
 
 func openDialSCTP(ctx context.Context, dialer *Dialer, network string, laddr, raddr *SCTPAddr) (*SCTPConn, error) {
+	if err := sctpValidateTransportMode(sctpTransportModeFromDialer(dialer)); err != nil {
+		return nil, &OpError{Op: "dial", Net: network, Source: laddr.opAddr(), Addr: raddr.opAddr(), Err: err}
+	}
 	switch network {
 	case "sctp", "sctp4", "sctp6":
 	default:
@@ -788,12 +860,33 @@ func ListenSCTP(network string, laddr *SCTPAddr) (*SCTPConn, error) {
 	return listenSCTP(context.Background(), ListenConfig{}, network, laddr)
 }
 
+// ListenSCTP acts like the package-level [ListenSCTP], using lc for optional
+// SCTP transport selection and socket configuration.
+func (lc *ListenConfig) ListenSCTP(ctx context.Context, network string, laddr *SCTPAddr) (*SCTPConn, error) {
+	if lc == nil {
+		return listenSCTP(ctx, ListenConfig{}, network, laddr)
+	}
+	return listenSCTP(ctx, *lc, network, laddr)
+}
+
 // OpenSCTP opens an unconnected one-to-many SCTP socket bound to laddr.
 func OpenSCTP(network string, laddr *SCTPAddr) (*SCTPConn, error) {
 	return openSCTP(context.Background(), ListenConfig{}, network, laddr)
 }
 
+// OpenSCTP acts like the package-level [OpenSCTP], using lc for optional SCTP
+// transport selection and socket configuration.
+func (lc *ListenConfig) OpenSCTP(ctx context.Context, network string, laddr *SCTPAddr) (*SCTPConn, error) {
+	if lc == nil {
+		return openSCTP(ctx, ListenConfig{}, network, laddr)
+	}
+	return openSCTP(ctx, *lc, network, laddr)
+}
+
 func listenSCTP(ctx context.Context, lc ListenConfig, network string, laddr *SCTPAddr) (*SCTPConn, error) {
+	if err := sctpValidateTransportMode(sctpTransportModeFromListenConfig(lc)); err != nil {
+		return nil, &OpError{Op: "listen", Net: network, Source: nil, Addr: laddr.opAddr(), Err: err}
+	}
 	switch network {
 	case "sctp", "sctp4", "sctp6":
 	default:
@@ -814,6 +907,9 @@ func listenSCTP(ctx context.Context, lc ListenConfig, network string, laddr *SCT
 }
 
 func openSCTP(ctx context.Context, lc ListenConfig, network string, laddr *SCTPAddr) (*SCTPConn, error) {
+	if err := sctpValidateTransportMode(sctpTransportModeFromListenConfig(lc)); err != nil {
+		return nil, &OpError{Op: "open", Net: network, Source: nil, Addr: laddr.opAddr(), Err: err}
+	}
 	switch network {
 	case "sctp", "sctp4", "sctp6":
 	default:
@@ -836,6 +932,24 @@ func openSCTP(ctx context.Context, lc ListenConfig, network string, laddr *SCTPA
 // ListenSCTPInit acts like [ListenSCTP] and configures SCTP_INITMSG on the socket.
 func ListenSCTPInit(network string, laddr *SCTPAddr, opts SCTPInitOptions) (*SCTPConn, error) {
 	c, err := listenSCTP(context.Background(), ListenConfig{}, network, laddr)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.SetInitOptions(opts); err != nil {
+		c.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+// ListenSCTPInit acts like the package-level [ListenSCTPInit], using lc for
+// optional SCTP transport selection and socket configuration.
+func (lc *ListenConfig) ListenSCTPInit(ctx context.Context, network string, laddr *SCTPAddr, opts SCTPInitOptions) (*SCTPConn, error) {
+	var base ListenConfig
+	if lc != nil {
+		base = *lc
+	}
+	c, err := listenSCTP(ctx, base, network, laddr)
 	if err != nil {
 		return nil, err
 	}
