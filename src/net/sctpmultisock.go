@@ -177,16 +177,7 @@ func DialSCTPMulti(network string, laddr, raddr *SCTPMultiAddr) (*SCTPConn, erro
 	return dialSCTPMulti(context.Background(), nil, network, laddr, raddr)
 }
 
-// DialSCTPMulti acts like the package-level [DialSCTPMulti], using d for
-// optional SCTP transport selection and socket configuration.
-func (d *Dialer) DialSCTPMulti(network string, laddr, raddr *SCTPMultiAddr) (*SCTPConn, error) {
-	return dialSCTPMulti(context.Background(), d, network, laddr, raddr)
-}
-
 func dialSCTPMulti(ctx context.Context, dialer *Dialer, network string, laddr, raddr *SCTPMultiAddr) (*SCTPConn, error) {
-	if err := sctpValidateTransportMode(sctpTransportModeFromDialer(dialer)); err != nil {
-		return nil, &OpError{Op: "dial", Net: network, Source: nil, Addr: nil, Err: err}
-	}
 	switch network {
 	case "sctp", "sctp4", "sctp6":
 	default:
@@ -259,19 +250,7 @@ func ListenSCTPMulti(network string, laddr *SCTPMultiAddr) (*SCTPConn, error) {
 	return listenSCTPMulti(context.Background(), ListenConfig{}, network, laddr)
 }
 
-// ListenSCTPMulti acts like the package-level [ListenSCTPMulti], using lc for
-// optional SCTP transport selection and socket configuration.
-func (lc *ListenConfig) ListenSCTPMulti(ctx context.Context, network string, laddr *SCTPMultiAddr) (*SCTPConn, error) {
-	if lc == nil {
-		return listenSCTPMulti(ctx, ListenConfig{}, network, laddr)
-	}
-	return listenSCTPMulti(ctx, *lc, network, laddr)
-}
-
 func listenSCTPMulti(ctx context.Context, lc ListenConfig, network string, laddr *SCTPMultiAddr) (*SCTPConn, error) {
-	if err := sctpValidateTransportMode(sctpTransportModeFromListenConfig(lc)); err != nil {
-		return nil, &OpError{Op: "listen", Net: network, Source: nil, Addr: nil, Err: err}
-	}
 	switch network {
 	case "sctp", "sctp4", "sctp6":
 	default:
@@ -318,24 +297,6 @@ func listenSCTPMulti(ctx context.Context, lc ListenConfig, network string, laddr
 // ListenSCTPMultiInit acts like [ListenSCTPMulti] and configures SCTP_INITMSG.
 func ListenSCTPMultiInit(network string, laddr *SCTPMultiAddr, opts SCTPInitOptions) (*SCTPConn, error) {
 	c, err := listenSCTPMulti(context.Background(), ListenConfig{}, network, laddr)
-	if err != nil {
-		return nil, err
-	}
-	if err := c.SetInitOptions(opts); err != nil {
-		c.Close()
-		return nil, err
-	}
-	return c, nil
-}
-
-// ListenSCTPMultiInit acts like the package-level [ListenSCTPMultiInit], using
-// lc for optional SCTP transport selection and socket configuration.
-func (lc *ListenConfig) ListenSCTPMultiInit(ctx context.Context, network string, laddr *SCTPMultiAddr, opts SCTPInitOptions) (*SCTPConn, error) {
-	var base ListenConfig
-	if lc != nil {
-		base = *lc
-	}
-	c, err := listenSCTPMulti(ctx, base, network, laddr)
 	if err != nil {
 		return nil, err
 	}
