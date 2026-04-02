@@ -8,6 +8,7 @@ The client:
 - fetches the live feature catalog from the server
 - creates a session
 - executes the current SCTP conformance catalog with the in-tree Go SCTP API
+- can request either the native or UDP-encapsulation transport profile from the server
 - leaves only unknown future server feature ids to the generic `unsupported`
   fallback
 
@@ -32,6 +33,14 @@ GO111MODULE=off GOROOT=$(pwd) GOOS=freebsd GOARCH=amd64 CGO_ENABLED=0 \
 GOROOT=$(pwd) ./bin/go run ./misc/sctp-feature-client/go --base-url http://free.metatao.net:18080
 ```
 
+To request the RFC 6951 UDP-encapsulation session profile explicitly:
+
+```bash
+GOROOT=$(pwd) ./bin/go run ./misc/sctp-feature-client/go \
+  --base-url http://free.metatao.net:18080 \
+  --transport-profile udp_encap
+```
+
 On FreeBSD 15, run the FreeBSD binary directly against the same server:
 
 ```bash
@@ -42,6 +51,7 @@ Optional flags:
 
 - `--agent-name`
 - `--environment-name`
+- `--transport-profile native|udp_encap`
 - `--features bind_listen_connect,nodelay`
 - `--include-manual-setup`
 - `--list-scenarios`
@@ -79,6 +89,12 @@ In code, `runFeature()` reads `started.Contract`, and handlers such as
 That is why multiple dashboard features can share one Go handler: the handler is
 generic, while the feature-specific payloads and addresses come from the
 FreeBSD server contract.
+
+The transport profile is also server-owned. When the session is created with
+`--transport-profile udp_encap`, the server returns `transport:
+"sctp4_udp_encap"` plus an `udp_encapsulation` block in each feature contract.
+The Go client then switches to the SCTP transport-mode API instead of treating
+`sctp4_udp_encap` as a literal network name.
 
 ## Current Support
 
