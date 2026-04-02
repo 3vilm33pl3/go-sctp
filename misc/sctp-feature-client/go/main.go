@@ -13,7 +13,6 @@ type cliConfig struct {
 	baseURL            string
 	agentName          string
 	environmentName    string
-	transportProfile   string
 	listScenarios      bool
 	includeManualSetup bool
 	featureFilter      map[string]bool
@@ -62,7 +61,7 @@ func run() int {
 		return 1
 	}
 
-	session, err := client.createSession(context.Background(), cfg.agentName, cfg.environmentName, cfg.transportProfile)
+	session, err := client.createSession(context.Background(), cfg.agentName, cfg.environmentName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create session: %v\n", err)
 		return 1
@@ -144,7 +143,6 @@ func parseFlags(args []string) (cliConfig, error) {
 	fs.StringVar(&cfg.baseURL, "base-url", "", "HTTP base URL of the SCTP feature server")
 	fs.StringVar(&cfg.agentName, "agent-name", "go-sctp-feature-client", "agent name reported to the server")
 	fs.StringVar(&cfg.environmentName, "environment-name", "go-sctp", "environment name reported to the server")
-	fs.StringVar(&cfg.transportProfile, "transport-profile", transportProfileNative, "server transport profile: native or udp_encap")
 	fs.BoolVar(&cfg.listScenarios, "list-scenarios", false, "print the client scenario map keyed by feature_id and exit")
 	fs.BoolVar(&cfg.includeManualSetup, "include-manual-setup", false, "run features whose server contract declares manual host setup requirements")
 	fs.StringVar(&features, "features", "", "optional comma-separated feature allowlist")
@@ -153,13 +151,6 @@ func parseFlags(args []string) (cliConfig, error) {
 	}
 	if cfg.baseURL == "" && !cfg.listScenarios {
 		return cliConfig{}, fmt.Errorf("--base-url is required")
-	}
-	cfg.transportProfile = strings.TrimSpace(cfg.transportProfile)
-	if cfg.transportProfile == "" {
-		cfg.transportProfile = transportProfileNative
-	}
-	if cfg.transportProfile != transportProfileNative && cfg.transportProfile != transportProfileUDPEncap {
-		return cliConfig{}, fmt.Errorf("--transport-profile must be %q or %q", transportProfileNative, transportProfileUDPEncap)
 	}
 	cfg.featureFilter = parseFeatureFilter(features)
 	return cfg, nil

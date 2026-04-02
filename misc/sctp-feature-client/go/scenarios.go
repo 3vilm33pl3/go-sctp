@@ -197,8 +197,7 @@ func (r *runner) waitForTerminal(ctx context.Context, sessionID, featureID strin
 }
 
 func handleSocketCreate(_ context.Context, _ *runner, contract *scenarioContract) (*completionPayload, error) {
-	lc := listenConfigForContract(contract)
-	conn, err := lc.ListenSCTP(context.Background(), contractSCTPNetwork(contract), nil)
+	conn, err := net.ListenSCTP("sctp4", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -457,8 +456,7 @@ func handleRecvNxtInfo(ctx context.Context, _ *runner, contract *scenarioContrac
 }
 
 func handleAutoClose(ctx context.Context, _ *runner, contract *scenarioContract) (*completionPayload, error) {
-	lc := listenConfigForContract(contract)
-	conn, err := lc.ListenSCTP(ctx, contractSCTPNetwork(contract), nil)
+	conn, err := net.ListenSCTP("sctp4", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -889,13 +887,11 @@ func handleOneToManyMultiAssoc(ctx context.Context, _ *runner, contract *scenari
 		return nil, fmt.Errorf("feature %s requires %d client messages, got %d", contract.FeatureID, contract.OneToMany.ExpectedAssociations, len(contract.ClientSendMessages))
 	}
 
-	network := contractSCTPNetwork(contract)
-	targets, err := resolveContractSCTPAddrs(network, contract.ConnectAddresses[:contract.OneToMany.ExpectedAssociations])
+	targets, err := resolveContractSCTPAddrs(contract.Transport, contract.ConnectAddresses[:contract.OneToMany.ExpectedAssociations])
 	if err != nil {
 		return nil, err
 	}
-	lc := listenConfigForContract(contract)
-	conn, err := lc.OpenSCTP(ctx, network, nil)
+	conn, err := net.OpenSCTP(contract.Transport, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1081,12 +1077,11 @@ func handleASCONFAddRemove(ctx context.Context, _ *runner, contract *scenarioCon
 		return nil, fmt.Errorf("missing address-reconfiguration contract")
 	}
 
-	network := contractSCTPNetwork(contract)
-	addAddrs, err := resolveContractSCTPAddrs(network, contract.AddressReconfig.AddAddresses)
+	addAddrs, err := resolveContractSCTPAddrs(contract.Transport, contract.AddressReconfig.AddAddresses)
 	if err != nil {
 		return nil, err
 	}
-	removeAddrs, err := resolveContractSCTPAddrs(network, contract.AddressReconfig.RemoveAddresses)
+	removeAddrs, err := resolveContractSCTPAddrs(contract.Transport, contract.AddressReconfig.RemoveAddresses)
 	if err != nil {
 		return nil, err
 	}
@@ -1216,13 +1211,11 @@ func handleStreamSchedulerValue(ctx context.Context, _ *runner, contract *scenar
 }
 
 func handleNegativeConnectError(ctx context.Context, _ *runner, contract *scenarioContract) (*completionPayload, error) {
-	network := contractSCTPNetwork(contract)
-	raddr, err := net.ResolveSCTPAddr(network, contract.NegativeTarget)
+	raddr, err := net.ResolveSCTPAddr("sctp4", contract.NegativeTarget)
 	if err != nil {
 		return nil, err
 	}
-	dialer := dialerForContract(contract)
-	conn, err := dialer.DialSCTP(network, nil, raddr)
+	conn, err := net.DialSCTP("sctp4", nil, raddr)
 	if err != nil {
 		return &completionPayload{
 			EvidenceKind: "runtime",
@@ -1304,57 +1297,15 @@ func handleUnorderedDelivery(ctx context.Context, _ *runner, contract *scenarioC
 	}, nil
 }
 
-func contractSCTPNetwork(contract *scenarioContract) string {
-	if contract == nil {
-		return "sctp4"
-	}
-	switch contract.Transport {
-	case "", "sctp4", "sctp4_udp_encap":
-		return "sctp4"
-	default:
-		return contract.Transport
-	}
-}
-
-func dialerForContract(contract *scenarioContract) net.Dialer {
-	var dialer net.Dialer
-	if contract == nil {
-		return dialer
-	}
-	if contract.Transport == "sctp4_udp_encap" {
-		dialer.SCTPTransportMode = net.SCTPTransportUDPEncap
-		if contract.UDPEncapsulation != nil {
-			dialer.SCTPUDPEncapsulation.RemotePort = contract.UDPEncapsulation.RemotePort
-		}
-	}
-	return dialer
-}
-
-func listenConfigForContract(contract *scenarioContract) net.ListenConfig {
-	var lc net.ListenConfig
-	if contract == nil {
-		return lc
-	}
-	if contract.Transport == "sctp4_udp_encap" {
-		lc.SCTPTransportMode = net.SCTPTransportUDPEncap
-		if contract.UDPEncapsulation != nil {
-			lc.SCTPUDPEncapsulation.RemotePort = contract.UDPEncapsulation.RemotePort
-		}
-	}
-	return lc
-}
-
 func dialContract(contract *scenarioContract) (*net.SCTPConn, error) {
 	if len(contract.ConnectAddresses) == 0 {
 		return nil, fmt.Errorf("feature %s did not provide connect addresses", contract.FeatureID)
 	}
-	network := contractSCTPNetwork(contract)
-	raddr, err := net.ResolveSCTPAddr(network, contract.ConnectAddresses[0])
+	raddr, err := net.ResolveSCTPAddr(contract.Transport, contract.ConnectAddresses[0])
 	if err != nil {
 		return nil, err
 	}
-	dialer := dialerForContract(contract)
-	return dialer.DialSCTPInit(network, nil, raddr, net.SCTPInitOptions{
+	return net.DialSCTPInit(contract.Transport, nil, raddr, net.SCTPInitOptions{
 		NumOStreams:  32,
 		MaxInStreams: 32,
 	})
@@ -1364,13 +1315,11 @@ func dialContractPreferMulti(contract *scenarioContract) (*net.SCTPConn, error) 
 	if len(contract.ConnectAddresses) <= 1 {
 		return dialContract(contract)
 	}
-	network := contractSCTPNetwork(contract)
-	raddr, err := net.ResolveSCTPMultiAddr(network, contract.ConnectAddresses)
+	raddr, err := net.ResolveSCTPMultiAddr(contract.Transport, contract.ConnectAddresses)
 	if err != nil {
 		return dialContract(contract)
 	}
-	dialer := dialerForContract(contract)
-	conn, err := dialer.DialSCTPMulti(network, nil, raddr)
+	conn, err := net.DialSCTPMulti(contract.Transport, nil, raddr)
 	if err != nil {
 		return nil, err
 	}
@@ -1796,8 +1745,7 @@ func openBoundFeatureSocket(contract *scenarioContract) (*net.SCTPConn, *net.SCT
 	if len(contract.ConnectAddresses) == 0 {
 		return nil, nil, nil, fmt.Errorf("feature %s did not provide connect addresses", contract.FeatureID)
 	}
-	network := contractSCTPNetwork(contract)
-	raddr, err := net.ResolveSCTPAddr(network, contract.ConnectAddresses[0])
+	raddr, err := net.ResolveSCTPAddr(contract.Transport, contract.ConnectAddresses[0])
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1805,8 +1753,7 @@ func openBoundFeatureSocket(contract *scenarioContract) (*net.SCTPConn, *net.SCT
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	lc := listenConfigForContract(contract)
-	conn, err := lc.ListenSCTP(context.Background(), network, localBase)
+	conn, err := net.ListenSCTP(contract.Transport, localBase)
 	if err != nil {
 		return nil, nil, nil, err
 	}

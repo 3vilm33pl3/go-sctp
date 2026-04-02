@@ -5,23 +5,6 @@ import (
 	"testing"
 )
 
-func TestParseFlagsTransportProfile(t *testing.T) {
-	cfg, err := parseFlags([]string{"--base-url", "http://127.0.0.1:18080", "--transport-profile", transportProfileUDPEncap})
-	if err != nil {
-		t.Fatalf("parseFlags returned error: %v", err)
-	}
-	if cfg.transportProfile != transportProfileUDPEncap {
-		t.Fatalf("cfg.transportProfile=%q, want %q", cfg.transportProfile, transportProfileUDPEncap)
-	}
-}
-
-func TestParseFlagsRejectsUnknownTransportProfile(t *testing.T) {
-	_, err := parseFlags([]string{"--base-url", "http://127.0.0.1:18080", "--transport-profile", "weird"})
-	if err == nil {
-		t.Fatal("parseFlags accepted an invalid transport profile")
-	}
-}
-
 func TestParseFeatureFilter(t *testing.T) {
 	got := parseFeatureFilter("bind_listen_connect, nodelay ,,ppid")
 	want := map[string]bool{

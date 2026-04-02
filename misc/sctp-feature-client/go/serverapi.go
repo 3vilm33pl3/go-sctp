@@ -16,9 +16,6 @@ const (
 	completionAgentReported  = "agent_reported"
 	completionHybrid         = "hybrid"
 
-	transportProfileNative   = "native"
-	transportProfileUDPEncap = "udp_encap"
-
 	statePending     = "pending"
 	stateActive      = "active"
 	statePassed      = "passed"
@@ -48,9 +45,8 @@ type catalogFeature struct {
 }
 
 type sessionResponse struct {
-	SessionID        string `json:"session_id"`
-	DashboardPath    string `json:"dashboard_path"`
-	TransportProfile string `json:"transport_profile"`
+	SessionID     string `json:"session_id"`
+	DashboardPath string `json:"dashboard_path"`
 }
 
 type messageSpec struct {
@@ -109,34 +105,28 @@ type oneToManyContract struct {
 	RequireDistinctAssocIDs bool `json:"require_distinct_assoc_ids"`
 }
 
-type udpEncapsulationContract struct {
-	RemotePort int    `json:"remote_port"`
-	RFC        string `json:"rfc"`
-}
-
 type scenarioContract struct {
-	FeatureID               string                    `json:"feature_id"`
-	CompletionMode          string                    `json:"completion_mode"`
-	Transport               string                    `json:"transport"`
-	ConnectAddresses        []string                  `json:"connect_addresses"`
-	ClientSocketOpts        []string                  `json:"client_socket_options"`
-	ClientSubs              []string                  `json:"client_subscriptions"`
-	ClientSendMessages      []messageSpec             `json:"client_send_messages"`
-	ServerSendMessages      []messageSpec             `json:"server_send_messages"`
-	TriggerPayload          string                    `json:"trigger_payload"`
-	NegativeTarget          string                    `json:"negative_connect_target"`
-	TimeoutSeconds          int                       `json:"timeout_seconds"`
-	ManualSetupRequired     bool                      `json:"manual_setup_required"`
-	ManualSetupInstructions []string                  `json:"manual_setup_instructions"`
-	ReportPrompt            string                    `json:"report_prompt"`
-	InstructionsText        string                    `json:"instructions_text"`
-	Auth                    *authContract             `json:"auth,omitempty"`
-	AddressReconfig         *addressReconfigContract  `json:"address_reconfig,omitempty"`
-	Interleaving            *interleavingContract     `json:"interleaving,omitempty"`
-	Scheduler               *schedulerContract        `json:"scheduler,omitempty"`
-	SocketTuning            *socketTuningContract     `json:"socket_tuning,omitempty"`
-	OneToMany               *oneToManyContract        `json:"one_to_many,omitempty"`
-	UDPEncapsulation        *udpEncapsulationContract `json:"udp_encapsulation,omitempty"`
+	FeatureID               string                   `json:"feature_id"`
+	CompletionMode          string                   `json:"completion_mode"`
+	Transport               string                   `json:"transport"`
+	ConnectAddresses        []string                 `json:"connect_addresses"`
+	ClientSocketOpts        []string                 `json:"client_socket_options"`
+	ClientSubs              []string                 `json:"client_subscriptions"`
+	ClientSendMessages      []messageSpec            `json:"client_send_messages"`
+	ServerSendMessages      []messageSpec            `json:"server_send_messages"`
+	TriggerPayload          string                   `json:"trigger_payload"`
+	NegativeTarget          string                   `json:"negative_connect_target"`
+	TimeoutSeconds          int                      `json:"timeout_seconds"`
+	ManualSetupRequired     bool                     `json:"manual_setup_required"`
+	ManualSetupInstructions []string                 `json:"manual_setup_instructions"`
+	ReportPrompt            string                   `json:"report_prompt"`
+	InstructionsText        string                   `json:"instructions_text"`
+	Auth                    *authContract            `json:"auth,omitempty"`
+	AddressReconfig         *addressReconfigContract `json:"address_reconfig,omitempty"`
+	Interleaving            *interleavingContract    `json:"interleaving,omitempty"`
+	Scheduler               *schedulerContract       `json:"scheduler,omitempty"`
+	SocketTuning            *socketTuningContract    `json:"socket_tuning,omitempty"`
+	OneToMany               *oneToManyContract       `json:"one_to_many,omitempty"`
 }
 
 type featureState struct {
@@ -212,15 +202,13 @@ func (c *featureServerClient) features(ctx context.Context) (*catalogResponse, e
 	return &out, nil
 }
 
-func (c *featureServerClient) createSession(ctx context.Context, agentName, environmentName, transportProfile string) (*sessionResponse, error) {
+func (c *featureServerClient) createSession(ctx context.Context, agentName, environmentName string) (*sessionResponse, error) {
 	body := struct {
-		AgentName        string `json:"agent_name"`
-		EnvironmentName  string `json:"environment_name"`
-		TransportProfile string `json:"transport_profile,omitempty"`
+		AgentName       string `json:"agent_name"`
+		EnvironmentName string `json:"environment_name"`
 	}{
-		AgentName:        agentName,
-		EnvironmentName:  environmentName,
-		TransportProfile: transportProfile,
+		AgentName:       agentName,
+		EnvironmentName: environmentName,
 	}
 	var out sessionResponse
 	if err := c.doJSON(ctx, http.MethodPost, "/v1/sessions", body, &out); err != nil {
